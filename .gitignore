@@ -1,0 +1,34 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.env
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# Datasets and large tabular data files (>35 MB)
+*.csv
+*.tsv
+*.xlsx
+*.parquet
+
+# Model artifacts and binary checkpoints
+*.pkl
+*.joblib
+*.model
+*.h5
+
+# macOS / Windows system files
+.DS_Store
+Thumbs.db
+
+# VS Code / IDE settings
+.vscode/
+.idea/
