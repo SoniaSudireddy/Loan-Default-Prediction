@@ -1,34 +1,41 @@
-# Byte-compiled / optimized / DLL files
+
+# Python
 __pycache__/
 *.py[cod]
-*$py.class
+.pytest_cache/
+.coverage
 
-# Virtual Environments
+# Virtual environments and secrets
+.venv/
 venv/
 env/
 ENV/
 .env
 
-# Jupyter Notebook checkpoints
+# Notebook temporary files
 .ipynb_checkpoints/
-*/.ipynb_checkpoints/*
 
-# Datasets and large tabular data files (>35 MB)
+# Local datasets
 *.csv
 *.tsv
 *.xlsx
 *.parquet
 
-# Model artifacts and binary checkpoints
+# Trained model binaries
 *.pkl
 *.joblib
 *.model
 *.h5
 
-# macOS / Windows system files
+# Editors and operating systems
+.vscode/
+.idea/
 .DS_Store
 Thumbs.db
 
-# VS Code / IDE settings
-.vscode/
-.idea/
+# Keep evaluation reports in Git
+!results/
+!results/model_comparison.csv
+!results/threshold_comparison.csv
+!results/validation_metrics.json
+!results/test_metrics.json

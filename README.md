@@ -1,9 +1,10 @@
-# Loan Default Prediction — End-to-End Machine Learning Project
+# Loan Default Prediction
 
-> **Project type:** Binary classification / supervised machine learning  
-> **Primary notebook:** `loan-default-prediction-end-to-end-ml.ipynb`  
-> **Dataset:** `Loan_default.csv` (loaded from a Kaggle dataset)  
-> **Main model used for the saved pipeline:** LightGBM (`LGBMClassifier`)
+An end-to-end machine-learning project that estimates the likelihood of loan default from applicant and loan attributes. The project covers data inspection, preprocessing, feature engineering, model comparison, validation-based threshold selection, final test-set evaluation, saving the trained model, and exposing predictions through a FastAPI REST API.
+
+This README is written to explain the project to someone who has not seen the code before: what problem it addresses, what data it uses, how the pipeline works, how results should be interpreted, and how to run and test the application.
+
+> **Responsible-use notice:** This is an educational project and a demonstration of a machine-learning workflow. It is not a production lending system and must not be used as the sole basis for approving or rejecting real loan applicants. Real-world use requires independent validation, fairness assessment, privacy safeguards, legal/regulatory review, human oversight, and monitoring.
 
 ---
 
@@ -16,576 +17,503 @@
 5. [How the Project Works](#how-the-project-works)
 6. [Technology Stack](#technology-stack)
 7. [Dataset Description](#dataset-description)
-8. [Project Workflow](#project-workflow)
-9. [Data Inspection and Preprocessing](#data-inspection-and-preprocessing)
-10. [Feature Engineering](#feature-engineering)
-11. [Models Implemented](#models-implemented)
-12. [Model Evaluation](#model-evaluation)
-13. [Business Cost and Decision Threshold](#business-cost-and-decision-threshold)
-14. [Feature Importance](#feature-importance)
-15. [Saving and Using the Model](#saving-and-using-the-model)
-16. [How to Run the Project](#how-to-run-the-project)
-17. [Running Locally in VS Code](#running-locally-in-vs-code)
-18. [Expected Outputs](#expected-outputs)
-19. [Repository Structure](#repository-structure)
-20. [Important Implementation Notes](#important-implementation-notes)
-21. [Advantages](#advantages)
-22. [Limitations and Future Improvements](#limitations-and-future-improvements)
-23. [Responsible Use](#responsible-use)
-24. [Learning Outcomes](#learning-outcomes)
-25. [Author](#author)
+8. [Data Inspection and Preprocessing](#data-inspection-and-preprocessing)
+9. [Feature Engineering](#feature-engineering)
+10. [Models Implemented](#models-implemented)
+11. [Model Evaluation and Results](#model-evaluation-and-results)
+12. [Threshold Selection and Decision Logic](#threshold-selection-and-decision-logic)
+13. [Saving and Using the Model](#saving-and-using-the-model)
+14. [FastAPI Prediction API](#fastapi-prediction-api)
+15. [How to Run the Project in VS Code](#how-to-run-the-project-in-vs-code)
+16. [Automated Testing](#automated-testing)
+17. [Expected Outputs and Repository Structure](#expected-outputs-and-repository-structure)
+18. [Important Assumptions and Limitations](#important-assumptions-and-limitations)
+19. [Future Improvements](#future-improvements)
+20. [Learning Outcomes](#learning-outcomes)
+21. [Author](#author)
 
 ---
 
-## Project Overview
+## 1. Project Overview
 
-The **Loan Default Prediction** project uses historical loan-application data to estimate whether a borrower may default on a loan. It treats the task as a **binary classification problem**:
+Loan Default Prediction is a supervised machine-learning project. It uses historical loan records to learn patterns associated with loan default and then estimates the likelihood that a new record belongs to the default class.
 
-- `0` — the record is labelled as **no default**
-- `1` — the record is labelled as **default**
+The target column is `Default`:
 
-The notebook explores the data, prepares numerical and categorical features, trains machine-learning models, evaluates their predictions, engineers additional features, compares several algorithms, explores a cost-based decision threshold, and saves a fitted preprocessing-and-model pipeline as `loan_default_model.pkl`.
+- `0` — the record is labelled as no default.
+- `1` — the record is labelled as default.
 
-The notebook is an experimental machine-learning workflow. It is **not yet a deployed production application or a complete lending API**.
+The trained model produces a score for an applicant record. A decision threshold converts that score into a binary prediction. The model does not know with certainty whether a borrower will repay a loan; it estimates patterns learned from the data.
 
-## Problem Statement
+The project has two main parts:
 
-Loan providers need to assess the risk that a borrower will not repay a loan as agreed. Reviewing applications manually can be time-consuming, and risk decisions based on limited information can be inconsistent.
+1. **Model-training workflow:** loads the dataset, validates and prepares the data, creates features, compares models, selects a threshold, evaluates the chosen model, and saves the resulting pipeline and reports.
+2. **Prediction API:** loads the saved model and exposes a prediction endpoint through FastAPI. Pydantic validates incoming request fields before inference.
 
-This project investigates whether borrower and loan attributes can be used by a supervised-learning model to estimate default risk. The output is a probability estimate and a threshold-based classification. Such predictions can support further review, but they should not be treated as an automatic or definitive lending decision.
+## 2. Problem Statement
 
-## Objectives
+Loan providers need to assess the risk that a borrower may fail to repay a loan according to its terms. Manual review can be time-consuming, and decisions based on limited information can be inconsistent. Machine learning can help analyse historical records and identify patterns associated with past defaults.
 
-- Load and inspect the loan dataset.
-- Check column types, missing values, and the distribution of the target variable.
-- Separate input features (`X`) from the target (`y`).
-- Preprocess numerical and categorical data with scikit-learn pipelines.
-- Split data into training and testing sets while preserving the target distribution.
-- Train a LightGBM classifier.
-- Evaluate predictions using a classification report, ROC-AUC, and a confusion matrix.
+This project formulates loan default prediction as a **binary classification problem**. Applicant and loan attributes are used as input features, and `Default` is the target label. Several algorithms are trained and compared to identify a candidate model that performs well according to a defined validation metric.
+
+The output is a risk estimate, not a guarantee or a complete credit assessment. The model's usefulness depends on the quality and representativeness of the dataset, the correctness of the feature definitions, and the metric used to select the model.
+
+## 3. Objectives
+
+The main objectives are to:
+
+- Load and inspect a loan dataset using Python.
+- Validate the expected columns and target values.
+- Separate predictive features from the target column.
+- Handle missing numerical and categorical values.
 - Create additional loan-related features.
-- Compare Logistic Regression, Random Forest, and LightGBM.
-- Explore a decision threshold based on assumed false-negative and false-positive costs.
-- Inspect LightGBM feature importance.
-- Save a fitted pipeline and demonstrate prediction for a sample application.
+- Compare Logistic Regression, Decision Tree, Random Forest, and LightGBM.
+- Use a validation set to select a model and a classification threshold.
+- Evaluate the final model on a separate test set.
+- Save the fitted pipeline and configuration so the model can be reused.
+- Build a REST API for making predictions.
+- Validate API input and test both valid and invalid requests.
+- Document the workflow, results, assumptions, and limitations.
 
-## Why This Project?
+## 4. Why This Project?
 
-Loan default prediction is a practical example of classification in financial risk analysis. It demonstrates how raw tabular data can be transformed into model-ready features and how evaluation should consider more than accuracy alone.
+This project demonstrates a practical machine-learning workflow using structured data. It is useful because real ML projects involve more than selecting an algorithm: data must be checked, transformations must be applied consistently, models must be compared fairly, and the final performance must be measured on data that was not used to tune the model.
 
-The project is useful for learning data preparation, feature engineering, classification, model comparison, evaluation metrics, class-imbalance handling, model persistence, and the difference between a probability score and a business decision.
+The project provides practice in:
+- Data analysis and validation
+- Feature engineering and preprocessing pipelines
+- Binary classification
+- Class imbalance and evaluation metrics
+- Model comparison and threshold selection
+- Model serialization and reuse
+- API development and request validation
+- Automated testing and reproducible execution
 
-## How the Project Works
+## 5. How the Project Works
 
-At a high level, the workflow is:
+The overall workflow is:
 
-1. **Load data:** Read `Loan_default.csv` into a pandas DataFrame.
-2. **Inspect data:** Review data types, missing values, and the target distribution.
-3. **Prepare inputs:** Remove `LoanID` if it exists; separate the `Default` target from predictors.
-4. **Preprocess features:** Impute and scale numerical columns; impute and one-hot encode categorical columns.
-5. **Split data:** Keep 80% for training and 20% for testing, using stratification and `random_state=42`.
-6. **Train baseline model:** Fit a LightGBM classifier with class weighting based on the training target distribution.
-7. **Evaluate:** Generate predicted probabilities and classifications, then calculate classification metrics and plot a confusion matrix.
-8. **Engineer features:** Create loan-to-income, estimated monthly payment, payment-to-income ratio, and credit-score tier.
-9. **Compare models:** Train Logistic Regression, Random Forest, and LightGBM on the engineered feature set.
-10. **Explore threshold costs:** Compare assumed financial costs across thresholds from 0.10 to 0.90.
-11. **Save a pipeline:** Fit the engineered-feature LightGBM pipeline and save it to `loan_default_model.pkl`.
-12. **Demonstrate prediction:** Pass a sample applicant dictionary to `predict_loan_application()`.
+1. **Load the CSV:** Read `Loan_default.csv` into a pandas DataFrame.
+2. **Inspect and validate:** Check required columns and ensure the target values are valid.
+3. **Prepare the target and features:** Separate `Default` from the input columns and exclude `LoanID` if it is present.
+4. **Split the data:** Create training, validation, and test subsets using stratification.
+5. **Engineer features:** Create derived features from existing loan attributes.
+6. **Preprocess inputs:** Impute missing values, scale numerical values, and one-hot encode categorical values.
+7. **Train candidate models:** Fit each candidate model on the training subset.
+8. **Compare models:** Rank the candidates using validation average precision.
+9. **Select a threshold:** Compare candidate thresholds using validation F1-score.
+10. **Evaluate the selected model:** Apply the chosen model and threshold to the held-out test set.
+11. **Save artifacts:** Store the fitted model, selected configuration, and evaluation reports.
+12. **Serve predictions:** Load the saved model through FastAPI and accept validated input.
+13. **Test the application:** Run automated tests for endpoints, valid predictions, and invalid input cases.
 
----
+### Data split from the reported run
 
-## Technology Stack
+| Subset | Rows | Approximate share |
+|---|---:|---:|
+| Training | 178,742 | 70% |
+| Validation | 38,302 | 15% |
+| Test | 38,303 | 15% |
+| **Total** | **255,347** | **100%** |
+
+The training subset is used to fit the model. The validation subset is used to compare models and select the threshold. The test subset is reserved for final evaluation after those decisions are made.
+
+## 6. Technology Stack
 
 | Technology | How it is used |
 |---|---|
-| Python | Main programming language |
-| Kaggle Notebooks | Notebook environment used by the current workflow |
-| pandas | Loading and manipulating tabular data |
-| NumPy | Numerical operations and threshold generation |
-| Matplotlib | Plotting evaluation and feature-importance charts |
-| Seaborn | Confusion-matrix heatmap and feature-importance visualisation |
-| scikit-learn | Data splitting, preprocessing, pipelines, metrics, and Logistic Regression / Random Forest |
-| LightGBM | Gradient-boosted tree classification |
-| joblib | Saving the fitted model pipeline to disk |
-| Jupyter Notebook | Interactive, cell-by-cell execution |
+| Python | Main programming language for the project |
+| pandas | Loads, inspects, and manipulates the tabular dataset |
+| NumPy | Supports numerical operations and threshold generation |
+| scikit-learn | Provides data splitting, preprocessing, pipelines, classification models, and evaluation metrics |
+| LightGBM | Provides a gradient-boosting model candidate |
+| joblib | Saves the fitted model pipeline to disk |
+| FastAPI | Exposes prediction functionality through HTTP endpoints |
+| Pydantic | Validates the types and ranges of API input fields |
+| Uvicorn | Runs the FastAPI application locally |
+| pytest | Runs automated tests |
+| VS Code | Local development and execution environment |
 
-### Installation requirements
+## 7. Dataset Description
 
-The notebook imports these core libraries:
+The training script expects a CSV file named `Loan_default.csv` at the path configured in `train_and_save.py`. The target column is `Default`.
 
-```bash
-pip install numpy pandas matplotlib seaborn scikit-learn lightgbm joblib jupyter
-```
+### Numerical features
 
-If running inside Kaggle, several libraries may already be installed. If a package is missing, install it in the notebook environment and restart the kernel if required.
+- `Age`
+- `Income`
+- `LoanAmount`
+- `CreditScore`
+- `MonthsEmployed`
+- `NumCreditLines`
+- `InterestRate`
+- `LoanTerm`
+- `DTIRatio`
 
-## Dataset Description
+### Categorical features
 
-The notebook reads a file named `Loan_default.csv` using this Kaggle input path:
+- `Education`
+- `EmploymentType`
+- `MaritalStatus`
+- `HasMortgage`
+- `HasDependents`
+- `LoanPurpose`
+- `HasCoSigner`
 
-```python
-file_path = '/kaggle/input/datasets/sonia27chowdary/loan-default-data/Loan_default.csv'
-df = pd.read_csv(file_path)
-```
+`LoanID`, if present, is treated as an identifier rather than a predictive feature.
 
-The notebook expects the dataset to contain the following columns.
+### Dataset summary from the reported training run
 
-### Target column
+| Item | Value |
+|---|---:|
+| Rows before cleaning | 255,347 |
+| Rows after cleaning | 255,347 |
+| Columns before cleaning | 18 |
+| Columns after cleaning | 17 |
+| `Default = 0` | 225,694 |
+| `Default = 1` | 29,653 |
 
-| Column | Meaning in this project |
+The number of rows stayed the same in this run, while the column count decreased by one. Confirm from the training code which column was removed and document the reason.
+
+The dataset's original source, licence, feature definitions, and permitted use must be verified and documented before publishing or redistributing it. The README does not assume a particular source or licence without verification.
+
+## 8. Data Inspection and Preprocessing
+
+Before training, the script checks that required columns exist and that the target contains valid binary values. The target is separated from the input features, and the identifier is excluded when present.
+
+The pipeline applies separate preprocessing to numerical and categorical columns:
+
+- **Numerical data:** missing values are imputed using the median, then values are standardised.
+- **Categorical data:** missing values are imputed using the most frequent category, then categories are one-hot encoded.
+- **Unknown categories:** the encoder is configured to ignore categories not observed during fitting. The API may still reject values that do not match its declared request schema.
+
+The transformations are part of the fitted pipeline. This helps ensure that training and inference use the same transformations and prevents the preprocessing stage from learning imputation or scaling values from the validation or test subsets.
+
+The target class distribution shows that the no-default class is more common than the default class. Therefore, accuracy alone is not enough to assess model quality; precision, recall, F1-score, average precision, and confusion-matrix counts are also important.
+
+## 9. Feature Engineering
+
+Feature engineering creates additional variables from the original inputs to represent potentially useful relationships.
+
+The `CreditFeatureEngineer` transformer creates the following features:
+
+| Derived feature | Purpose |
 |---|---|
-| `Default` | Target label: `0` for no default and `1` for default |
+| `LoanToIncome` | Relates the loan amount to income |
+| `EstimatedMonthlyPayment` | Estimates a payment amount using loan amount, interest rate, and term |
+| `PaymentToIncomeRatio` | Relates estimated payment to monthly income |
+| `CreditScoreTier` | Groups credit scores into categorical bands |
 
-### Numerical input features
+These transformations are included in the machine-learning pipeline so they are applied consistently when the model is trained and when it receives new records through the API.
 
-| Column | Description |
+**Implementation detail to verify:** the payment calculation is only as reliable as its formula and units. A standard amortising-loan payment calculation depends on the interest rate per payment period and the number of payment periods. Confirm the implementation in `features.py`, including the units of `Income`, `InterestRate`, and `LoanTerm`, before treating this derived feature as a financially exact payment.
+
+## 10. Models Implemented
+
+The training script compares four classification algorithms.
+
+### Logistic Regression
+A linear classification algorithm that estimates the relationship between input features and the target. It is a useful baseline and was selected in the reported run.
+
+### Decision Tree
+A tree-based algorithm that learns decision rules by splitting records according to feature values. It can model non-linear relationships but may overfit if not constrained.
+
+### Random Forest
+An ensemble of decision trees whose predictions are combined. It can model complex relationships and reduce some of the instability of a single tree.
+
+### LightGBM
+A gradient-boosting tree algorithm that builds trees sequentially to improve prediction performance. It is commonly used for structured/tabular data.
+
+The winning model is selected by **validation average precision**, not by the model name or by test-set performance.
+
+## 11. Model Evaluation and Results
+
+Multiple metrics are reported because the default class is less common than the no-default class.
+
+- **Accuracy:** proportion of all predictions that are correct.
+- **Precision:** proportion of predicted defaults that are actually labelled default.
+- **Recall:** proportion of actual defaults identified by the model.
+- **F1-score:** harmonic mean of precision and recall.
+- **ROC-AUC:** measures the model's ability to rank positive cases above negative cases across thresholds.
+- **Average precision:** summarises precision-recall performance and is useful when classes are imbalanced.
+- **Confusion matrix:** counts true negatives, false positives, false negatives, and true positives.
+
+### Validation model comparison
+
+The following values are from the reported training run:
+
+| Model | Validation ROC-AUC | Validation average precision |
+|---|---:|---:|
+| Logistic Regression | 0.7590 | **0.3343** |
+| Decision Tree | 0.6982 | 0.2669 |
+| Random Forest | 0.7526 | 0.3245 |
+| LightGBM | 0.7556 | 0.3298 |
+
+**Selected model: Logistic Regression.** It achieved the highest validation average precision among the four models in this run.
+
+### Final test-set evaluation
+
+The selected model was evaluated on the held-out test set using threshold `0.62`.
+
+| Metric | Test result |
+|---|---:|
+| Accuracy | 80.61% |
+| Precision | 30.44% |
+| Recall | 52.11% |
+| F1-score | 0.3843 |
+| ROC-AUC | 0.7659 |
+| Average precision | 0.3392 |
+
+### Confusion matrix counts
+
+| Outcome | Count | Meaning |
+|---|---:|---|
+| True negatives (TN) | 28,557 | Correctly predicted no default |
+| False positives (FP) | 5,298 | Predicted default, but actual class was no default |
+| False negatives (FN) | 2,130 | Actual default cases not identified |
+| True positives (TP) | 2,318 | Correctly predicted default |
+
+### What the results mean
+
+The model achieved 80.61% accuracy on the test set, but that value should not be interpreted alone. The test recall of 52.11% means the model identified a little over half of the actual default records in this test sample. Precision of 30.44% means about three in ten records predicted as default were labelled default in this sample.
+
+The confusion matrix also shows that false positives and false negatives remain. These errors can have different consequences depending on the intended use. The reported metrics describe this dataset and split; they are not a guarantee of future performance.
+
+## 12. Threshold Selection and Decision Logic
+
+A model's predicted score is converted into a class by applying a decision threshold. The threshold determines how high the score must be before the record is classified as default.
+
+For the reported run:
+
+- **Selected threshold:** `0.62`
+- Score greater than or equal to `0.62` → predicted default (`1`)
+- Score below `0.62` → predicted no default (`0`)
+
+The threshold was selected by maximising **F1-score on the validation set**. This balances precision and recall according to the F1 formula. It does not necessarily minimise financial loss or represent an optimal real-world lending policy.
+
+The test set is used only after model and threshold selection. If the project later adopts a cost-based decision rule, the costs of false positives and false negatives should be explicitly justified, and the threshold should still be selected using validation data rather than the final test set.
+
+## 13. Saving and Using the Model
+
+After training, the script saves the fitted pipeline and its configuration.
+
+| File | Purpose |
 |---|---|
-| `Age` | Borrower's age |
-| `Income` | Reported income |
-| `LoanAmount` | Amount requested or recorded for the loan |
-| `CreditScore` | Credit score |
-| `MonthsEmployed` | Number of months employed |
-| `NumCreditLines` | Number of credit lines |
-| `InterestRate` | Loan interest rate |
-| `LoanTerm` | Loan term |
-| `DTIRatio` | Debt-to-income ratio |
+| `loan_default_model.pkl` | Fitted feature-engineering, preprocessing, and classifier pipeline |
+| `model_config.json` | Selected model and threshold configuration |
+| `results/model_comparison.csv` | Validation metrics for candidate models |
+| `results/threshold_comparison.csv` | Metrics for candidate thresholds on validation data |
+| `results/test_metrics.json` | Final metrics from the held-out test set |
 
-### Categorical input features
+The saved pipeline should be used for inference so that feature engineering and preprocessing match the training process. Only load model files from trusted sources because joblib/pickle files are not safe to load from untrusted origins.
 
-| Column | Description |
-|---|---|
-| `Education` | Education category |
-| `EmploymentType` | Employment category |
-| `MaritalStatus` | Marital-status category |
-| `HasMortgage` | Whether a mortgage is recorded |
-| `HasDependents` | Whether dependents are recorded |
-| `LoanPurpose` | Purpose of the loan |
-| `HasCoSigner` | Whether a co-signer is recorded |
+## 14. FastAPI Prediction API
 
-### Identifier
+The prediction service is implemented in `app.py`. FastAPI exposes endpoints for checking the service and requesting predictions. The main prediction route is `POST /predict`.
 
-| Column | How it is handled |
-|---|---|
-| `LoanID` | Dropped if present because it is an identifier, not intended as a predictive feature |
+Pydantic validates request fields before inference. The schema can enforce required fields, numeric types, allowed ranges, and accepted categories. This helps reject malformed requests before they reach the model.
 
-**Important:** These descriptions explain how the notebook uses the column names; confirm their exact definitions, units, and coding against the original dataset documentation before using the model for real decisions. The notebook prints the actual dataset shape and column information when executed; this README does not claim a row count or model score because those values are not embedded as fixed results in the notebook source.
+The API should load the model saved by the training script and use the intended threshold configuration. The interactive documentation shows the exact request schema accepted by the current code.
 
-## Project Workflow
+### API endpoints
 
-### 1. Load the data
+- `GET /` — returns basic service status.
+- Health endpoint — reports the service/model status if configured in `app.py`.
+- `POST /predict` — validates an applicant payload and returns a prediction response.
 
-`pandas.read_csv()` loads the CSV file into `df`. The notebook prints the dataset shape and displays the first rows so that the data can be checked.
+Endpoint details depend on the current implementation in `app.py`; use the live API documentation as the definitive schema.
 
-### 2. Inspect data quality
+## 15. How to Run the Project in VS Code
 
-The notebook uses:
+These instructions assume Windows PowerShell and a project directory containing `train_and_save.py`, `app.py`, `features.py`, and `requirements.txt`.
 
-- `df.info()` to inspect columns, data types, and non-null counts.
-- `df.isnull().sum()` to count missing values in each column.
-- `df['Default'].value_counts(normalize=True)` to inspect the proportion of each target class.
+### Step 1: Open the project folder
 
-These checks are initial diagnostics. They do not replace a full audit of duplicates, invalid ranges, inconsistent categories, leakage, or unusual values.
+Open the project folder in VS Code and select **Terminal → New Terminal**.
 
-### 3. Separate features and target
-
-The target is `Default`. All other retained columns are inputs:
-
-```python
-target_col = 'Default'
-X = df.drop(columns=[target_col])
-y = df[target_col]
-```
-
-If `LoanID` is present, it is dropped first.
-
-### 4. Preprocess numerical columns
-
-The numerical pipeline applies:
-
-- **Median imputation:** Replaces missing numerical values with the median of the relevant training feature.
-- **Standard scaling:** Transforms numerical values to a common scale by centring and scaling them.
-
-The preprocessing steps are inside a scikit-learn `Pipeline` and `ColumnTransformer`, so they are fitted on the training data rather than manually applied to the complete dataset before splitting.
-
-### 5. Preprocess categorical columns
-
-The categorical pipeline applies:
-
-- **Most-frequent imputation:** Fills missing categorical values with the most common training value.
-- **One-hot encoding:** Converts categories into numerical indicator columns.
-- `handle_unknown='ignore'`: Allows the encoder to handle categories not seen during fitting without raising an error.
-
-### 6. Split the data
-
-The notebook uses an 80/20 train-test split:
-
-```python
-train_test_split(
-    X, y,
-    test_size=0.2,
-    random_state=42,
-    stratify=y
-)
-```
-
-- `test_size=0.2` reserves 20% for testing.
-- `random_state=42` makes the split reproducible.
-- `stratify=y` helps preserve the target-class proportions in both sets.
-
-### 7. Handle class imbalance
-
-The baseline LightGBM model calculates:
-
-```python
-pos_weight = (y_train == 0).sum() / (y_train == 1).sum()
-```
-
-This ratio is supplied as `scale_pos_weight`. It gives additional training weight to the positive/default class when the negative/no-default class is more common. The actual class distribution should still be checked; weighting is not a substitute for evaluating precision, recall, and calibration.
-
-### 8. Train the baseline LightGBM model
-
-The baseline model is wrapped with its preprocessing steps in a single pipeline. Its configured parameters include:
-
-- `n_estimators=150`
-- `learning_rate=0.05`
-- `scale_pos_weight=pos_weight`
-- `random_state=42`
-- `n_jobs=-1`
-
-The pipeline is fitted on `X_train` and `y_train`.
-
-### 9. Evaluate the baseline model
-
-The notebook calculates default-class probabilities with `predict_proba()` and initially classifies a record as default when its probability is at least `0.50`.
-
-It then prints a classification report and ROC-AUC and displays a confusion matrix. See [Model Evaluation](#model-evaluation) for how to interpret these outputs.
-
-### 10. Engineer features and compare models
-
-The notebook creates four additional features and compares three algorithms using the engineered dataset. See [Feature Engineering](#feature-engineering) and [Models Implemented](#models-implemented).
-
----
-
-## Feature Engineering
-
-Feature engineering adds derived variables that may represent financial relationships more directly than the original columns.
-
-| Engineered feature | Formula in the notebook | Intended interpretation |
-|---|---|---|
-| `LoanToIncome` | `LoanAmount / (Income + 1)` | Loan amount relative to reported income |
-| `EstimatedMonthlyPayment` | `LoanAmount / (LoanTerm + 1)` | A simplified loan-amount-per-term estimate |
-| `PaymentToIncomeRatio` | `EstimatedMonthlyPayment / ((Income / 12) + 1)` | Estimated payment relative to monthly income |
-| `CreditScoreTier` | Bins `CreditScore` into named categories | A categorical representation of credit-score bands |
-
-The credit-score bins are defined as `[300, 580, 670, 740, 800, 850]`, with labels `Poor`, `Fair`, `Good`, `Very_Good`, and `Exceptional`.
-
-### Important interpretation notes
-
-- The `+1` terms avoid division by zero but change the exact meaning of each ratio.
-- `EstimatedMonthlyPayment` is a simplified approximation; it does **not** calculate a real amortised payment using interest rate and loan term.
-- Credit scores outside the defined bin boundaries can become missing in `CreditScoreTier`; the categorical imputer may fill those values during model preprocessing. Check score ranges and bin coverage before relying on this feature.
-- The feature engineering is performed before the engineered data is split. The current formulas use columns from each row and do not learn global statistics, but a stricter production workflow should build and validate all transformations inside a reproducible training pipeline.
-
-## Models Implemented
-
-The notebook benchmarks three classifiers using the engineered feature set.
-
-| Model | Role | Key configuration |
-|---|---|---|
-| Logistic Regression | Linear classification baseline | `max_iter=1000`, `class_weight='balanced'`, `random_state=42` |
-| Random Forest | Ensemble of decision trees | `n_estimators=100`, `class_weight='balanced'`, `random_state=42`, `n_jobs=-1` |
-| LightGBM | Gradient-boosted decision trees | `n_estimators=150`, `learning_rate=0.05`, `scale_pos_weight=pos_weight`, `random_state=42`, `n_jobs=-1` |
-
-Each model is placed after the same engineered-feature preprocessor. The notebook records accuracy, default-class recall, default-class precision, F1-score, and ROC-AUC in a model-comparison DataFrame.
-
-The notebook subsequently saves a **LightGBM** pipeline. It does not automatically save whichever model happens to rank first in the comparison table; the code explicitly selects `models_dict['LightGBM']`.
-
-## Model Evaluation
-
-The project uses several complementary metrics.
-
-| Metric | What it tells you |
-|---|---|
-| Accuracy | Fraction of all predictions that are correct |
-| Precision for default | Of applications predicted as default, the fraction actually labelled default |
-| Recall for default | Of actual defaults, the fraction the model identifies |
-| F1-score | Harmonic mean of precision and recall for the selected positive class |
-| ROC-AUC | How well probability scores rank positive examples above negative examples across thresholds |
-| Confusion matrix | Counts true negatives, false positives, false negatives, and true positives |
-
-### Confusion matrix
-
-The notebook plots a confusion matrix with `No Default (0)` and `Default (1)` labels. In a binary confusion matrix:
-
-- **True Negative (TN):** Correctly predicts no default.
-- **False Positive (FP):** Predicts default for a record labelled no default.
-- **False Negative (FN):** Predicts no default for a record labelled default.
-- **True Positive (TP):** Correctly predicts default.
-
-In lending-risk analysis, false negatives can be costly because risky applications may be missed. False positives can also be costly because potentially creditworthy applicants may be flagged. The appropriate trade-off depends on verified business costs, policy, fairness requirements, and human review.
-
-### Why accuracy alone is not enough
-
-If defaults are less common than non-defaults, a model can achieve high accuracy by mostly predicting no default. Recall, precision, F1-score, ROC-AUC, the confusion matrix, and probability calibration provide additional information. The actual printed results should be reviewed after running the notebook; no performance score is guaranteed by this README.
-
-## Business Cost and Decision Threshold
-
-The notebook assigns illustrative costs:
-
-```python
-COST_FN = 10000  # cost assigned to a false negative
-COST_FP = 1000   # cost assigned to a false positive
-```
-
-It calculates:
-
-```text
-Total cost = (number of false negatives × COST_FN)
-           + (number of false positives × COST_FP)
-```
-
-It checks 17 thresholds between `0.10` and `0.90` and selects the threshold with the lowest calculated cost. Lowering the threshold generally flags more applications as default; raising it generally flags fewer. The exact impact must be measured from the test predictions.
-
-**These cost values are assumptions for demonstration, not validated real-world financial estimates.** They must be justified with relevant business data before they are used operationally.
-
-The notebook currently reuses `y_pred_proba` from the earlier baseline model when evaluating thresholds against `y_test_fe`, the engineered-feature test target. Those probabilities were produced by a model trained on a different feature pipeline/split representation. For a valid threshold comparison, generate probabilities from a model trained on `X_train_fe` and evaluate them against the matching `X_test_fe` / `y_test_fe`. See [Important Implementation Notes](#important-implementation-notes).
-
-## Feature Importance
-
-The notebook extracts `feature_importances_` from the baseline LightGBM classifier and plots the ten highest-ranked features.
-
-Feature importance can help identify which input columns the fitted tree model used most for its splits. It does **not** prove that a feature causes default, show the direction of its effect, or establish that the feature is fair or appropriate for lending. One-hot encoding also expands categorical features into multiple indicator columns.
-
-For a stronger explanation, consider permutation importance, SHAP analysis, stability checks, and fairness analysis on held-out data.
-
-## Saving and Using the Model
-
-The notebook constructs an engineered-feature pipeline using the engineered preprocessor and LightGBM classifier, fits it, and saves it:
-
-```python
-import joblib
-
-joblib.dump(best_pipeline, 'loan_default_model.pkl')
-```
-
-The prediction helper loads that file and expects a dictionary containing **all input fields required by the engineered pipeline**. That includes the original input features and the engineered fields:
-
-- `LoanToIncome`
-- `EstimatedMonthlyPayment`
-- `PaymentToIncomeRatio`
-- `CreditScoreTier`
-
-The helper returns a dictionary with:
-
-- `status`
-- `default_probability`
-- `risk_decision`
-- `threshold_used`
-
-The decision labels in the notebook are `REJECT / HIGH RISK` when the predicted probability meets or exceeds the threshold, and `APPROVE / LOW RISK` otherwise. These are demo labels in the notebook, not a recommendation to make real lending decisions automatically.
-
-### Sample prediction
-
-The notebook includes one sample applicant and calls `predict_loan_application(sample_applicant)`. The probability and decision depend on the trained model, dataset, library versions, and selected threshold. Run the notebook to obtain the current output.
-
-**Important:** The helper currently requires callers to calculate engineered fields themselves. A safer design is to save a pipeline that receives only the original application fields and calculates derived features within the pipeline, reducing the risk of inconsistent or incorrect input calculations.
-
-## How to Run the Project
-
-### Option A — Run in Kaggle (closest to the notebook as written)
-
-1. Open Kaggle and navigate to your notebook.
-2. Attach the dataset that contains `Loan_default.csv`.
-3. Confirm the dataset input path matches the `file_path` in the first cell. Kaggle input paths can differ between notebooks and datasets.
-4. Run the notebook cells **from top to bottom**.
-5. Review the printed dataset information, missing-value counts, target distribution, classification report, ROC-AUC, confusion matrix, feature-importance plot, model comparison, and threshold output.
-6. The final cell saves `loan_default_model.pkl` in the notebook's current working directory.
-7. Download the `.pkl` file from the notebook output/files area if you need to use it elsewhere.
-
-### Option B — Run in VS Code / locally
-
-1. Install Python (use a version supported by the installed libraries).
-2. Create a project folder and place the notebook and CSV dataset in it.
-3. Open the folder in VS Code.
-4. Create and activate a virtual environment.
-
-**Windows PowerShell:**
+Example path from the reported setup:
 
 ```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
+cd "C:\Users\SoniaSudireddy\Documents\Loan_Prediction_Checkpoint2\Loan Default Prediction"
 ```
 
-If PowerShell blocks activation, you can use Command Prompt activation instead:
+If your project is stored elsewhere, use that actual path.
+
+### Step 2: Create and activate a virtual environment
+
+If your existing `venv` already works, activate it rather than creating a new one.
+
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+```
+
+If PowerShell blocks activation, use Command Prompt:
 
 ```bat
-.venv\Scripts\activate.bat
+venv\Scripts\activate.bat
 ```
 
-5. Install dependencies:
+### Step 3: Install dependencies
 
-```bash
+```powershell
 python -m pip install --upgrade pip
-pip install numpy pandas matplotlib seaborn scikit-learn lightgbm joblib jupyter ipykernel
+pip install -r requirements.txt
 ```
 
-6. Update the dataset path in the notebook. For a CSV stored beside the notebook, use:
+If the project does not yet have a complete `requirements.txt`, ensure it includes the packages actually imported by the project, including pandas, NumPy, scikit-learn, LightGBM, joblib, FastAPI, Pydantic, Uvicorn, and pytest.
 
-```python
-file_path = 'Loan_default.csv'
-df = pd.read_csv(file_path)
+### Step 4: Confirm the dataset path
+
+Make sure `Loan_default.csv` exists where `train_and_save.py` expects it. If it is stored in a different directory, update the configured path in the script.
+
+### Step 5: Train and evaluate the model
+
+Run:
+
+```powershell
+python train_and_save.py
 ```
 
-7. Open the `.ipynb` file in VS Code and select the `.venv` Python kernel.
-8. Run each cell from top to bottom.
-9. Check that the notebook completes and creates `loan_default_model.pkl`.
+The script should print the dataset summary, model comparison, selected model, selected threshold, validation metrics, and final test metrics. It should save the model and report files. If the script reports an error, resolve that error before proceeding.
 
-**Note:** The current notebook uses Kaggle's `/kaggle/input/...` path, so it will not run locally unchanged. The dataset file must be downloaded or otherwise made available to your local environment, and the path must be updated.
+### Step 6: Start the API
 
-## Expected Outputs
+After training completes and `loan_default_model.pkl` exists, run:
 
-When run successfully, the notebook should produce:
+```powershell
+python -m uvicorn app:app --reload
+```
 
-- Dataset shape and first rows.
-- Data types and non-null counts.
-- Missing-value counts by column.
-- Target-class proportions.
-- Training progress messages.
-- A classification report at threshold `0.50`.
-- A ROC-AUC score.
-- A confusion-matrix heatmap.
-- A chart of the top ten baseline LightGBM feature importances.
-- A comparison table for Logistic Regression, Random Forest, and LightGBM.
-- A selected threshold under the notebook's assumed cost values.
-- A saved file named `loan_default_model.pkl`.
-- A sample prediction response.
+Keep this terminal open while the server is running.
 
-Actual metrics, plots, threshold, and prediction values depend on the dataset and execution environment.
+Open the following URLs in your browser:
 
-## Repository Structure
+- API root: http://127.0.0.1:8000/
+- Swagger UI: http://127.0.0.1:8000/docs
 
-A recommended repository layout is:
+### Step 7: Request a prediction
+
+1. Open `http://127.0.0.1:8000/docs`.
+2. Expand `POST /predict`.
+3. Click **Try it out**.
+4. Enter JSON containing the fields required by the schema displayed on the page.
+5. Click **Execute**.
+6. Review the response and HTTP status.
+7. If there is an error, check the terminal running Uvicorn.
+
+### Step 8: Stop the server
+
+Return to the terminal running Uvicorn and press `Ctrl+C`.
+
+## 16. Automated Testing
+
+Activate the project environment, then run:
+
+```powershell
+python -m pytest -v
+```
+
+The reported test run passed **11 tests**, covering:
+- Root endpoint
+- Health endpoint
+- Valid prediction
+- Credit score above the permitted range
+- Negative income
+- Missing required field
+- Invalid category
+- Wrong numeric type
+- Null income
+- Extra field
+- Non-finite income
+
+A Starlette/httpx deprecation warning appeared in the reported run but did not cause a test failure. Dependency compatibility should be reviewed during maintenance, and tests should be rerun after changes to the code, model, or environment.
+
+Passing API tests confirms the behaviours covered by those tests. It does not prove that the model is accurate, fair, calibrated, or ready for production.
+
+## 17. Expected Outputs and Repository Structure
+
+### Generated outputs
+
+A successful training run should create or update:
+
+- `loan_default_model.pkl`
+- `model_config.json`
+- `results/model_comparison.csv`
+- `results/threshold_comparison.csv`
+- `results/test_metrics.json`
+
+A successful API startup should show a local Uvicorn URL. The `/docs` page should load while the server is running, and a valid request should return a prediction response.
+
+### Suggested project structure
 
 ```text
-loan-default-prediction/
-├── README.md
-├── loan-default-prediction-end-to-end-ml.ipynb
-├── Loan_default.csv              # Optional; avoid committing data without checking its licence/privacy
-├── loan_default_model.pkl        # Generated model artifact; usually do not commit large binaries
+Loan Default Prediction/
+├── app.py
+├── train_and_save.py
+├── features.py
+├── test_api.py
+├── test_run.py
 ├── requirements.txt
-└── .gitignore
+├── Loan_default.csv
+├── loan_default_model.pkl
+├── model_config.json
+├── README.md
+└── results/
+    ├── model_comparison.csv
+    ├── threshold_comparison.csv
+    └── test_metrics.json
 ```
 
-The notebook currently contains the workflow in one file; the folders above are a suggested organisation, not a claim that all of these files already exist in the repository.
+This is a suggested structure. Check the actual project folder to confirm which files exist. Do not commit private applicant data, credentials, virtual environments, or datasets whose licence does not permit redistribution.
 
-### Suggested `.gitignore`
+## 18. Important Assumptions and Limitations
 
-```gitignore
-.venv/
-__pycache__/
-.ipynb_checkpoints/
-*.py[cod]
-.env
-loan_default_model.pkl
-```
+- The training script expects the named columns and a binary `Default` target.
+- The dataset contains more no-default examples than default examples, so accuracy alone can be misleading.
+- The selected threshold maximises validation F1-score; it does not automatically minimise business costs.
+- Precision in the reported test results is relatively low, and both false-positive and false-negative errors remain.
+- Results may change when the dataset, random seed, code, or package versions change.
+- The dataset's source, licence, units, and feature definitions must be verified.
+- Feature engineering formulas should be checked for correct units and financial meaning.
+- Fairness, calibration, and performance on future applicant populations have not been established by the reported metrics.
+- The API's input validation checks request structure and ranges; it cannot guarantee that data is truthful or that the model's decision is appropriate.
 
-Add the dataset filename to `.gitignore` if its licence or size means it should not be committed. Do not commit confidential applicant data, credentials, or private records.
+Before any real-world use, conduct independent validation, privacy and security review, appropriate fairness testing, legal/regulatory review, and ongoing monitoring. Do not use this model alone to make consequential lending decisions.
 
-### Suggested `requirements.txt`
+## 19. Future Improvements
 
-```text
-numpy
-pandas
-matplotlib
-seaborn
-scikit-learn
-lightgbm
-joblib
-jupyter
-ipykernel
-```
+Possible next steps include:
 
-For reproducible results, record the tested Python and package versions after confirming the notebook runs successfully.
+1. Document and verify the dataset source, licence, and feature definitions.
+2. Review data-quality rules and feature ranges.
+3. Evaluate threshold choices against a documented cost matrix if reliable business costs are available.
+4. Assess probability calibration.
+5. Evaluate performance across appropriate demographic or operational groups where legally and ethically appropriate.
+6. Add explainability for the selected model.
+7. Record package versions and training metadata for reproducibility.
+8. Add monitoring and drift detection before considering deployment.
+9. Strengthen API security, logging, and deployment configuration if the project is extended.
 
-## Important Implementation Notes
+## 20. Learning Outcomes
 
-The following points should be fixed or verified before describing the notebook as production-ready:
+This project demonstrates:
+- Data loading, inspection, and validation
+- Numerical and categorical preprocessing
+- Feature engineering within a pipeline
+- Binary classification with four algorithms
+- Stratified train/validation/test splitting
+- Model comparison using validation metrics
+- Threshold selection without using the test set for tuning
+- Evaluation with precision, recall, F1-score, ROC-AUC, average precision, and confusion-matrix counts
+- Saving and reusing a trained model
+- Building and testing a FastAPI service
+- Documenting assumptions, limitations, and reproducible steps
 
-1. **Threshold evaluation uses mismatched predictions and labels.** The notebook's `y_pred_proba` comes from the baseline model's `X_test`, but the cost calculation compares those probabilities with `y_test_fe`. Recompute probabilities using the engineered-feature model and its matching engineered test split before selecting a threshold.
-2. **The saved model's input contract is fragile.** `best_pipeline` uses the engineered preprocessor, which expects the engineered columns. The sample helper calculates none of them automatically; it relies on the caller to supply them. Move feature creation into a reusable transformer/pipeline or validate and calculate these fields in the prediction function.
-3. **The threshold is selected on the test set.** Choosing a threshold that minimises cost on the same set used for final evaluation can make reported results optimistic. Use a validation set or cross-validation to select the threshold, then evaluate once on a separate untouched test set.
-4. **The comparison table does not explicitly select the winner.** It prints metrics for three models, but the saved pipeline explicitly uses LightGBM. Decide the model-selection criterion (for example, default recall subject to an acceptable precision or cost) and document the evidence.
-5. **Feature importance is from the baseline model.** The feature-importance plot is generated from the initial LightGBM model, not necessarily the final engineered-feature pipeline.
-6. **Credit-score bin boundaries need validation.** Verify that all legitimate credit scores fall within the configured bins and decide how out-of-range values should be handled.
-7. **The payment feature is simplified.** `LoanAmount / (LoanTerm + 1)` is not a standard amortisation formula. If the intended feature is a monthly payment estimate, define the term units and incorporate the interest rate appropriately.
-8. **Data quality checks can be expanded.** Add checks for duplicate records, target values outside `{0, 1}`, invalid ranges, impossible values, inconsistent categories, and data leakage.
-9. **Use a separate final test set.** Avoid repeatedly tuning features, models, and thresholds based on the same test data.
-10. **Evaluate probability quality and fairness.** Review calibration, performance by relevant groups, data representativeness, and potential disparate impact before any real-world use.
-
-These are code-review observations based on the notebook's current implementation, not evidence that the model has failed. They are practical next steps to make the analysis more reliable.
-
-## Advantages
-
-- Demonstrates a complete tabular classification workflow in one notebook.
-- Uses scikit-learn pipelines to keep preprocessing organised.
-- Handles missing values through imputation.
-- Supports numerical and categorical features.
-- Accounts for possible class imbalance in model training.
-- Evaluates models with several metrics instead of accuracy alone.
-- Compares linear, bagging-based, and gradient-boosting approaches.
-- Adds domain-inspired features.
-- Includes feature-importance visualisation.
-- Saves the fitted pipeline with joblib for reuse.
-
-## Limitations and Future Improvements
-
-- The notebook currently depends on a Kaggle-specific data path.
-- The exact dataset provenance, licence, and feature definitions should be documented.
-- Threshold selection currently uses mismatched baseline probabilities and engineered test labels and should be corrected.
-- Threshold tuning should use validation data rather than the final test set.
-- The prediction helper requires manually supplied engineered features.
-- The estimated monthly payment formula is simplified.
-- The notebook does not include a web interface, REST API, database, monitoring, or deployment configuration.
-- No fixed performance results are documented here; metrics should be recorded from a reproducible run.
-- More complete validation, model calibration, explainability, fairness testing, and drift monitoring are needed for real-world use.
-
-Possible future enhancements:
-
-1. Correct threshold evaluation and add validation-based threshold selection.
-2. Move feature engineering into the fitted pipeline.
-3. Add cross-validation and hyperparameter tuning.
-4. Add calibration curves and probability calibration.
-5. Add unit tests for preprocessing and prediction inputs.
-6. Add explainability with permutation importance or SHAP.
-7. Assess fairness and model performance across appropriate groups.
-8. Build a FastAPI or Flask prediction API with input validation.
-9. Add experiment tracking and model-version metadata.
-10. Deploy only after privacy, security, compliance, fairness, and business validation.
-
-## Responsible Use
-
-This project is educational and experimental. A prediction is a statistical estimate learned from historical data, not certainty about an individual borrower. Historical labels may reflect biases or outdated lending practices. Do not use this notebook alone to approve or reject real applicants. Any real deployment requires legal and regulatory review, privacy safeguards, fairness assessment, clear explanations, human oversight, monitoring, and validated business assumptions.
-
-## Learning Outcomes
-
-By completing and reviewing this project, you can practise:
-
-- Loading and inspecting a real-world-style CSV dataset.
-- Understanding a binary classification target.
-- Separating features from labels.
-- Handling missing numerical and categorical values.
-- Using `Pipeline` and `ColumnTransformer`.
-- Splitting data with stratification.
-- Training LightGBM, Logistic Regression, and Random Forest.
-- Evaluating classification using precision, recall, F1-score, ROC-AUC, and a confusion matrix.
-- Creating domain-inspired features.
-- Interpreting tree-based feature importance.
-- Exploring cost-sensitive classification thresholds.
-- Serialising a model with joblib and using it for a sample prediction.
-- Reviewing code for evaluation consistency and deployment readiness.
-
-## Author
+## 21. Author
 
 **Sonia Sudireddy**
 
-This project was developed as a machine-learning learning project using a Kaggle notebook and a loan-default dataset. Update this section with your repository link, dataset citation, and any verified experiment results before publishing.
+Project repository: [Loan Default Prediction](https://github.com/SoniaSudireddy/Loan-Default-Prediction)
+
+Before publishing or submitting, confirm the dataset citation and licence, verify that the paths and filenames match the actual project, and regenerate the reported metrics if the training pipeline changes.

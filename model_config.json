@@ -1,0 +1,14 @@
+{
+    "selected_model": "LogisticRegression",
+    "threshold": 0.62,
+    "threshold_selection_metric": "validation_f1",
+    "model_selection_metric": "validation_average_precision",
+    "target_column": "Default",
+    "positive_class": 1,
+    "random_state": 42,
+    "split": {
+        "train": 0.7,
+        "validation": 0.15,
+        "test": 0.15
+    }
+}
